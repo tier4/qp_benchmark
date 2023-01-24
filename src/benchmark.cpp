@@ -7,7 +7,7 @@
 
 #include <autoware_auto_planning_msgs/msg/trajectory.hpp>
 #include <nav_msgs/msg/odometry.hpp>
-#include <tier4_planning_msgs/msg/velocity_limit.hpp>
+// #include <tier4_planning_msgs/msg/velocity_limit.hpp>
 
 #include <filesystem>
 #include <iostream>
@@ -27,7 +27,8 @@ static unsigned long toNanoSec(const builtin_interfaces::msg::Time & msg)
 int main(int argc, char ** argv)
 {
   if (argc <= 1) {
-    std::cout << "Usage: ros2 run trajectory_optimizer benchmark <path to .db3>" << std::endl;
+    std::cout << "Usage: ros2 run trajectory_optimizer benchmark <path to bagdir (in share)>"
+              << std::endl;
     return 1;
   }
 
@@ -57,29 +58,20 @@ int main(int argc, char ** argv)
   std::vector<unsigned long> times;
   std::vector<autoware_auto_planning_msgs::msg::Trajectory> trajectories;
   std::vector<nav_msgs::msg::Odometry> positions;
-  std::vector<tier4_planning_msgs::msg::VelocityLimit> max_vels;
 
   // Helper
   rclcpp::Serialization<builtin_interfaces::msg::Time> time_serialized_helper;
   rclcpp::Serialization<autoware_auto_planning_msgs::msg::Trajectory> traj_serialize_helper;
   rclcpp::Serialization<nav_msgs::msg::Odometry> pos_serialize_helper;
-  rclcpp::Serialization<tier4_planning_msgs::msg::VelocityLimit> maxvel_serialize_helper;
 
   // wait for first data
   std::optional<unsigned long> latest_time;
   std::optional<autoware_auto_planning_msgs::msg::Trajectory> latest_traj;
   std::optional<nav_msgs::msg::Odometry> latest_pos;
-  std::optional<tier4_planning_msgs::msg::VelocityLimit> latest_maxvel;
-  auto data_ready = [&]() {
-    return latest_traj.has_value() && latest_pos.has_value() && latest_maxvel.has_value();
-  };
+  auto data_ready = [&]() { return latest_traj.has_value() && latest_pos.has_value(); };
   bool data_ready_prev = false;
-  int cnt = 0;
+
   while (reader.has_next()) {
-    if (cnt % 100 == 0) {
-      std::cout << "reading " << cnt << "-th data" << std::endl;
-    }
-    cnt++;
     const auto serialized_message = reader.read_next();
     if (serialized_message->topic_name.compare(k_trajectory_topic_name) == 0) {
       // trajectory
@@ -90,11 +82,9 @@ int main(int argc, char ** argv)
       latest_time = toNanoSec(traj_msg.header.stamp);
       // all data received
       if (data_ready() && !data_ready_prev) {
-        std::cout << "data ready" << std::endl;
         times.push_back(0);
         trajectories.push_back(std::move(traj_msg));
         positions.push_back(latest_pos.value());
-        max_vels.push_back(latest_maxvel.value());
         data_ready_prev = true;
       }
       // use latest for others
@@ -102,7 +92,6 @@ int main(int argc, char ** argv)
         times.push_back(latest_time.value() - times.back());
         trajectories.push_back(std::move(traj_msg));
         positions.push_back(positions.back());
-        max_vels.push_back(max_vels.back());
       }
     } else if (serialized_message->topic_name.compare(k_localization_topic_name) == 0) {
       // localization
@@ -113,11 +102,9 @@ int main(int argc, char ** argv)
       latest_time = toNanoSec(pos_msg.header.stamp);
       // all data received
       if (data_ready() && !data_ready_prev) {
-        std::cout << "data ready" << std::endl;
         times.push_back(0);
         trajectories.push_back(latest_traj.value());
         positions.push_back(std::move(pos_msg));
-        max_vels.push_back(latest_maxvel.value());
         data_ready_prev = true;
       }
       // use latest for others
@@ -125,30 +112,6 @@ int main(int argc, char ** argv)
         times.push_back(latest_time.value() - times.back());
         trajectories.push_back(trajectories.back());
         positions.push_back(std::move(pos_msg));
-        max_vels.push_back(max_vels.back());
-      }
-    } else if (serialized_message->topic_name.compare(k_maxvel_topic_name) == 0) {
-      // max velocity
-      const rclcpp::SerializedMessage raw_maxvel_msg(*serialized_message->serialized_data);
-      tier4_planning_msgs::msg::VelocityLimit maxvel_msg;
-      maxvel_serialize_helper.deserialize_message(&raw_maxvel_msg, &maxvel_msg);
-      latest_maxvel = maxvel_msg;
-      latest_time = toNanoSec(maxvel_msg.stamp);
-      // all data received
-      if (data_ready() && !data_ready_prev) {
-        std::cout << "data ready" << std::endl;
-        times.push_back(0);
-        trajectories.push_back(latest_traj.value());
-        positions.push_back(latest_pos.value());
-        max_vels.push_back(std::move(maxvel_msg));
-        data_ready_prev = true;
-      }
-      // use latest for others
-      else if (data_ready() && data_ready_prev) {
-        times.push_back(latest_time.value() - times.back());
-        trajectories.push_back(trajectories.back());
-        positions.push_back(positions.back());
-        max_vels.push_back(std::move(maxvel_msg));
       }
     }
   }
