@@ -9,6 +9,8 @@
 #include <nav_msgs/msg/odometry.hpp>
 // #include <tier4_planning_msgs/msg/velocity_limit.hpp>
 
+#include "./param.hpp"
+
 #include <filesystem>
 #include <iostream>
 #include <optional>
@@ -18,10 +20,9 @@ const std::string k_trajectory_topic_name =
 const std::string k_localization_topic_name = "/localization/kinematic_state";
 const std::string k_maxvel_topic_name = "/planning/scenario_planning/max_velocity";
 
-static unsigned long toNanoSec(const builtin_interfaces::msg::Time & msg)
+static double toSec(const builtin_interfaces::msg::Time & msg)
 {
-  return static_cast<unsigned long>(msg.sec) +
-         static_cast<unsigned long>(msg.nanosec) * 1'000'000'000;
+  return msg.sec + static_cast<double>(msg.nanosec) / 1'000'000'000;
 }
 
 int main(int argc, char ** argv)
@@ -55,7 +56,7 @@ int main(int argc, char ** argv)
   const auto topic_type_info = reader.get_all_topics_and_types();
 
   // Fetchall data
-  std::vector<unsigned long> times;
+  std::vector<double> times;
   std::vector<autoware_auto_planning_msgs::msg::Trajectory> trajectories;
   std::vector<nav_msgs::msg::Odometry> positions;
 
@@ -65,7 +66,7 @@ int main(int argc, char ** argv)
   rclcpp::Serialization<nav_msgs::msg::Odometry> pos_serialize_helper;
 
   // wait for first data
-  std::optional<unsigned long> latest_time;
+  std::optional<double> latest_time;
   std::optional<autoware_auto_planning_msgs::msg::Trajectory> latest_traj;
   std::optional<nav_msgs::msg::Odometry> latest_pos;
   auto data_ready = [&]() { return latest_traj.has_value() && latest_pos.has_value(); };
@@ -79,10 +80,10 @@ int main(int argc, char ** argv)
       autoware_auto_planning_msgs::msg::Trajectory traj_msg;
       traj_serialize_helper.deserialize_message(&raw_traj_msg, &traj_msg);
       latest_traj = traj_msg;
-      latest_time = toNanoSec(traj_msg.header.stamp);
+      latest_time = toSec(traj_msg.header.stamp);
       // all data received
       if (data_ready() && !data_ready_prev) {
-        times.push_back(0);
+        times.push_back(0.0);
         trajectories.push_back(std::move(traj_msg));
         positions.push_back(latest_pos.value());
         data_ready_prev = true;
@@ -99,10 +100,10 @@ int main(int argc, char ** argv)
       nav_msgs::msg::Odometry pos_msg;
       pos_serialize_helper.deserialize_message(&raw_pos_msg, &pos_msg);
       latest_pos = pos_msg;
-      latest_time = toNanoSec(pos_msg.header.stamp);
+      latest_time = toSec(pos_msg.header.stamp);
       // all data received
       if (data_ready() && !data_ready_prev) {
-        times.push_back(0);
+        times.push_back(0.0);
         trajectories.push_back(latest_traj.value());
         positions.push_back(std::move(pos_msg));
         data_ready_prev = true;

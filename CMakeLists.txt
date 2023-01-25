@@ -19,4 +19,5 @@ ament_auto_add_executable(benchmark
 ament_auto_package(
   INSTALL_TO_SHARE
   bags
+  config
 )
