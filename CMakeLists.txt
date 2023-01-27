@@ -14,6 +14,9 @@ include_directories(
 
 ament_auto_add_executable(benchmark
   src/benchmark.cpp
+  src/smoother.cpp
+  src/trajectory_utils.cpp
+  src/resample.cpp
 )
 
 ament_auto_package(

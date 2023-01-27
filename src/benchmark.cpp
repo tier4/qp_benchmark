@@ -10,20 +10,23 @@
 // #include <tier4_planning_msgs/msg/velocity_limit.hpp>
 
 #include "./param.hpp"
+#include "./trajectory_utils.hpp"
 
 #include <filesystem>
 #include <iostream>
 #include <optional>
 
+namespace
+{
 const std::string k_trajectory_topic_name =
   "/planning/scenario_planning/scenario_selector/trajectory";
 const std::string k_localization_topic_name = "/localization/kinematic_state";
-const std::string k_maxvel_topic_name = "/planning/scenario_planning/max_velocity";
 
 static double toSec(const builtin_interfaces::msg::Time & msg)
 {
   return msg.sec + static_cast<double>(msg.nanosec) / 1'000'000'000;
 }
+}  // namespace
 
 int main(int argc, char ** argv)
 {
@@ -74,13 +77,13 @@ int main(int argc, char ** argv)
 
   while (reader.has_next()) {
     const auto serialized_message = reader.read_next();
-    if (serialized_message->topic_name.compare(k_trajectory_topic_name) == 0) {
+    if (serialized_message->topic_name.compare(::k_trajectory_topic_name) == 0) {
       // trajectory
       const rclcpp::SerializedMessage raw_traj_msg(*serialized_message->serialized_data);
       autoware_auto_planning_msgs::msg::Trajectory traj_msg;
       traj_serialize_helper.deserialize_message(&raw_traj_msg, &traj_msg);
       latest_traj = traj_msg;
-      latest_time = toSec(traj_msg.header.stamp);
+      latest_time = ::toSec(traj_msg.header.stamp);
       // all data received
       if (data_ready() && !data_ready_prev) {
         times.push_back(0.0);
@@ -94,7 +97,7 @@ int main(int argc, char ** argv)
         trajectories.push_back(std::move(traj_msg));
         positions.push_back(positions.back());
       }
-    } else if (serialized_message->topic_name.compare(k_localization_topic_name) == 0) {
+    } else if (serialized_message->topic_name.compare(::k_localization_topic_name) == 0) {
       // localization
       const rclcpp::SerializedMessage raw_pos_msg(*serialized_message->serialized_data);
       nav_msgs::msg::Odometry pos_msg;
@@ -122,11 +125,4 @@ int main(int argc, char ** argv)
     std::cout << "featched empty data" << std::endl;
     return 1;
   }
-  // Use
-  const auto & sample_trajectory = trajectories[n_trajectory / 2];
-  const auto & prev_sample_trajectory = trajectories[n_trajectory / 2 - 1];
-
-  std::cout << "sample_trajectory size is " << sample_trajectory.points.size() << std::endl;
-  std::cout << "prev_sample_trajectory size is " << prev_sample_trajectory.points.size()
-            << std::endl;
 }
