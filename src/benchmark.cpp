@@ -9,8 +9,9 @@
 #include <nav_msgs/msg/odometry.hpp>
 // #include <tier4_planning_msgs/msg/velocity_limit.hpp>
 
-#include "./param.hpp"
-#include "./trajectory_utils.hpp"
+#include "./smoother.hpp"
+
+#include <matplotlibcpp17/pyplot.h>
 
 #include <filesystem>
 #include <iostream>
@@ -120,9 +121,26 @@ int main(int argc, char ** argv)
     }
   }
 
-  const size_t n_trajectory = trajectories.size();
-  if (n_trajectory == 0) {
+  const size_t n_data = trajectories.size();
+  if (n_data == 0) {
     std::cout << "featched empty data" << std::endl;
     return 1;
   }
+
+  // plotter
+  pybind11::scoped_interpreter guard{};
+  auto plt = matplotlibcpp17::pyplot::import();
+
+  /*
+  SmootherFrontEnd smoother{};
+  for (size_t i = 0; i < n_data; ++i) {
+    const auto & input_trajectory = trajectories[i];
+    const auto & input_odom = positions[i];
+    const auto output_trajectory = smoother.onCurrentTrajectory(input_trajectory, input_odom);
+    break;
+  }
+  */
+
+  plt.plot(Args(std::vector<int>({1, 3, 2, 4})), Kwargs("color"_a = "blue", "linewidth"_a = 1.0));
+  plt.show();
 }

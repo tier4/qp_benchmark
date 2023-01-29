@@ -21,6 +21,8 @@ ament_auto_add_executable(benchmark
   src/resample.cpp
 )
 
+target_link_libraries(benchmark matplotlibcpp17::matplotlibcpp17)
+
 ament_auto_package(
   INSTALL_TO_SHARE
   bags
