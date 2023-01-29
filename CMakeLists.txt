@@ -14,14 +14,16 @@ include_directories(
     ${EIGEN3_INCLUDE_DIR}
 )
 
-ament_auto_add_executable(benchmark
-  src/benchmark.cpp
+ament_auto_add_library(benchmark_smoother
   src/smoother.cpp
   src/trajectory_utils.cpp
   src/resample.cpp
 )
 
-target_link_libraries(benchmark matplotlibcpp17::matplotlibcpp17)
+ament_auto_add_executable(benchmark
+  src/benchmark.cpp
+)
+target_link_libraries(benchmark benchmark_smoother matplotlibcpp17::matplotlibcpp17)
 
 ament_auto_package(
   INSTALL_TO_SHARE
