@@ -7,6 +7,8 @@ autoware_package()
 find_package(eigen3_cmake_module REQUIRED)
 find_package(Eigen3 REQUIRED)
 
+add_subdirectory(thirdparty/matplotlibcpp17)
+
 include_directories(
   SYSTEM
     ${EIGEN3_INCLUDE_DIR}
