@@ -38,7 +38,7 @@ double getMaxVelocity(const TrajectoryPoints & trajectory);
 double getMaxAbsVelocity(const TrajectoryPoints & trajectory);
 
 void applyMaximumVelocityLimit(
-  const size_t from, const size_t to, const double max_vel, TrajectoryPoints & trajectory);
+  const size_t from, const size_t to, const double max_vel, TrajectoryPoints * trajectory);
 
 std::optional<size_t> searchZeroVelocityIdx(const TrajectoryPoints & trajectory);
 

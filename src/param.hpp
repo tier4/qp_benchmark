@@ -31,6 +31,7 @@ struct Param
   const double extract_ahead_dist = 200.0;
   const double extract_behind_dist = 5.0;
   const double stop_dist_to_prohibit_engage = 0.5;
+  const double over_stop_velocity_warn_thr = 1.389;
 
   // from autoware_launch/config/planning/scenario_planning/common/nearest_search.param.yaml
   // See MotionVelocitySmootherNode::initCommonParam()
@@ -72,4 +73,15 @@ struct Param
   ResampleParam post_resample_param{
     200.0, 150.0, 2.0, 0.2, 0.1, 0.5, 4.0,
   };
+
+  // from
+  // autoware_launch/config/planning/scenario_planning/common/motion_velocity_smoother/JerkFiltered.param.yaml
+  struct JerkFiltered
+  {
+    const double jerk_weight = 0.1;
+    const double over_v_weight = 10000.0;
+    const double over_a_weight = 500.0;
+    const double over_j_weight = 200.0;
+    const double jerk_filter_ds = 0.1;
+  } smoother_param;
 };

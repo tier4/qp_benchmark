@@ -7,6 +7,8 @@
 
 #include <optional>
 
+using TrajectoryPoints = std::vector<autoware_auto_planning_msgs::msg::TrajectoryPoint>;
+
 class SmootherFrontEnd
 {
 public:
@@ -26,24 +28,26 @@ public:
 public:
   void onCurrentTrajectory(
     const autoware_auto_planning_msgs::msg::Trajectory &, const nav_msgs::msg::Odometry &);
-  std::vector<autoware_auto_planning_msgs::msg::TrajectoryPoint> calcTrajectoryVelocity(
-    const std::vector<autoware_auto_planning_msgs::msg::TrajectoryPoint> &,
-    const nav_msgs::msg::Odometry &) const;
-  void updatePrevValues(
-    const std::vector<autoware_auto_planning_msgs::msg::TrajectoryPoint> &,
-    const nav_msgs::msg::Odometry &);
-  size_t findNearestIndexFromEgo(
-    const std::vector<autoware_auto_planning_msgs::msg::TrajectoryPoint> &,
-    const nav_msgs::msg::Odometry &) const;
-  void applyStopApproachingVelocity(
-    std::vector<autoware_auto_planning_msgs::msg::TrajectoryPoint> *) const;
+  TrajectoryPoints calcTrajectoryVelocity(
+    const TrajectoryPoints &, const nav_msgs::msg::Odometry &) const;
+  void updatePrevValues(const TrajectoryPoints &, const nav_msgs::msg::Odometry &);
+  size_t findNearestIndexFromEgo(const TrajectoryPoints &, const nav_msgs::msg::Odometry &) const;
+  void applyStopApproachingVelocity(TrajectoryPoints *) const;
   std::pair<Motion, InitializeType> calcInitialMotion(
-    const std::vector<autoware_auto_planning_msgs::msg::TrajectoryPoint> &,
-    const nav_msgs::msg::Odometry &, const size_t input_closest) const;
+    const TrajectoryPoints &, const nav_msgs::msg::Odometry &, const size_t input_closest) const;
+  std::optional<TrajectoryPoints> applyLateralAccelerationFilter(
+    const TrajectoryPoints & input, const double v0, const double a0,
+    const bool enable_smooth_limit) const;
+  std::optional<TrajectoryPoints> applySteeringRateLimit(const TrajectoryPoints & input) const;
+  std::optional<TrajectoryPoints> apply(
+    const double v, const double a, const TrajectoryPoints & input) const;
+  void overwriteStopPoint(const TrajectoryPoints & input, TrajectoryPoints * output) const;
+  void insertBehindVelocity(
+    const size_t output_closest, const InitializeType type, TrajectoryPoints * output) const;
 
 private:
   autoware_auto_planning_msgs::msg::TrajectoryPoint prev_closest_point_;
-  std::vector<autoware_auto_planning_msgs::msg::TrajectoryPoint> prev_output_;
+  TrajectoryPoints prev_output_;
   std::optional<autoware_auto_planning_msgs::msg::TrajectoryPoint>
     current_closest_point_from_prev_output_ = std::nullopt;
 };

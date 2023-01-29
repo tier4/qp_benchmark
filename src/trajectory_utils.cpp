@@ -244,11 +244,11 @@ double getMaxAbsVelocity(const TrajectoryPoints & trajectory)
 }
 
 void applyMaximumVelocityLimit(
-  const size_t begin, const size_t end, const double max_vel, TrajectoryPoints & trajectory)
+  const size_t begin, const size_t end, const double max_vel, TrajectoryPoints * trajectory)
 {
   for (size_t idx = begin; idx < end; ++idx) {
-    if (trajectory.at(idx).longitudinal_velocity_mps > max_vel) {
-      trajectory.at(idx).longitudinal_velocity_mps = max_vel;
+    if (trajectory->at(idx).longitudinal_velocity_mps > max_vel) {
+      trajectory->at(idx).longitudinal_velocity_mps = max_vel;
     }
   }
 }
