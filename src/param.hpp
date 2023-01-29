@@ -3,13 +3,13 @@
 // from include/motion_velocity_smoother/resample.hpp
 struct ResampleParam
 {
-  double max_trajectory_length;
-  double min_trajectory_length;
-  double resample_time;
-  double dense_resample_dt;
-  double dense_min_interval_distance;
-  double sparse_resample_dt;
-  double sparse_min_interval_distance;
+  const double max_trajectory_length;
+  const double min_trajectory_length;
+  const double resample_time;
+  const double dense_resample_dt;
+  const double dense_min_interval_distance;
+  const double sparse_resample_dt;
+  const double sparse_min_interval_distance;
 };
 
 // from include/motion_velocity_smoother/motion_velocity_smoother_node.hpp
@@ -84,4 +84,13 @@ struct Param
     const double over_j_weight = 200.0;
     const double jerk_filter_ds = 0.1;
   } smoother_param;
+
+  struct QPSolver
+  {
+    const double max_iter = 20000;
+    const double rho_interval = 0;  // 0 means automatic
+    const double eps_rel = 1.0e-6;  // def: 1.0e-4
+    const double eps_abs = 1.0e-8;  // def: 1.0e-4
+    const bool verbose = false;
+  } solver_setting;
 };

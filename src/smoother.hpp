@@ -2,6 +2,8 @@
 
 #include "./param.hpp"
 
+#include <osqp_interface/osqp_interface.hpp>
+
 #include <autoware_auto_planning_msgs/msg/trajectory.hpp>
 #include <nav_msgs/msg/odometry.hpp>
 
@@ -26,7 +28,7 @@ public:
   };
 
 public:
-  void onCurrentTrajectory(
+  TrajectoryPoints onCurrentTrajectory(
     const autoware_auto_planning_msgs::msg::Trajectory &, const nav_msgs::msg::Odometry &);
   TrajectoryPoints calcTrajectoryVelocity(
     const TrajectoryPoints &, const nav_msgs::msg::Odometry &) const;
@@ -40,14 +42,26 @@ public:
     const bool enable_smooth_limit) const;
   std::optional<TrajectoryPoints> applySteeringRateLimit(const TrajectoryPoints & input) const;
   std::optional<TrajectoryPoints> apply(
-    const double v, const double a, const TrajectoryPoints & input) const;
+    const double v0, const double a0, const TrajectoryPoints & input);
   void overwriteStopPoint(const TrajectoryPoints & input, TrajectoryPoints * output) const;
   void insertBehindVelocity(
     const size_t output_closest, const InitializeType type, TrajectoryPoints * output) const;
+
+  // JerkFiltered
+  TrajectoryPoints forwardJerkFilter(
+    const double v0, const double a0, const double a_max, const double a_start, const double j_max,
+    const TrajectoryPoints & input) const;
+  TrajectoryPoints backwardJerkFilter(
+    const double v0, const double a0, const double a_min, const double a_stop, const double j_min,
+    const TrajectoryPoints & input) const;
+  TrajectoryPoints mergeFilteredTrajectory(
+    const double v0, const double a0, const double a_min, const double j_min,
+    const TrajectoryPoints & forward_filtered, const TrajectoryPoints & backward_filtered) const;
 
 private:
   autoware_auto_planning_msgs::msg::TrajectoryPoint prev_closest_point_;
   TrajectoryPoints prev_output_;
   std::optional<autoware_auto_planning_msgs::msg::TrajectoryPoint>
     current_closest_point_from_prev_output_ = std::nullopt;
+  autoware::common::osqp::OSQPInterface qp_solver_;
 };
