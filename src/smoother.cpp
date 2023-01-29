@@ -9,7 +9,7 @@ TrajectoryPoints SmootherFrontEnd::onCurrentTrajectory(
   const autoware_auto_planning_msgs::msg::Trajectory & sub_trajectory,
   const nav_msgs::msg::Odometry & current_odom)
 {
-  if (prev_output_.empty()) {
+  if (not prev_output_.empty()) {
     const size_t current_seg_idx = motion_utils::findFirstNearestSegmentIndexWithSoftConstraints(
       prev_output_, current_odom.pose.pose, param_.ego_nearest_dist_threshold,
       param_.ego_nearest_yaw_threshold);

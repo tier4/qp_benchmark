@@ -11,14 +11,16 @@
 
 #include "./smoother.hpp"
 
+#include <motion_utils/trajectory/tmp_conversion.hpp>
+#include <tier4_autoware_utils/geometry/geometry.hpp>
+
 #include <matplotlibcpp17/pyplot.h>
 
 #include <filesystem>
 #include <iostream>
 #include <optional>
+#include <tuple>
 
-namespace
-{
 const std::string k_trajectory_topic_name =
   "/planning/scenario_planning/scenario_selector/trajectory";
 const std::string k_localization_topic_name = "/localization/kinematic_state";
@@ -27,7 +29,34 @@ static double toSec(const builtin_interfaces::msg::Time & msg)
 {
   return msg.sec + static_cast<double>(msg.nanosec) / 1'000'000'000;
 }
-}  // namespace
+
+static std::tuple<
+  std::vector<double>, std::vector<double>, std::vector<double>, std::vector<double>>
+serialize(
+  const std::vector<autoware_auto_planning_msgs::msg::TrajectoryPoint> & vec, double init = 0)
+{
+  if (vec.size() == 0) {
+    return {
+      std::vector<double>({init}), std::vector<double>({}), std::vector<double>({}),
+      std::vector<double>({})};
+  }
+
+  std::vector<double> cumsum, lon, lat, accel;
+  double sum = init;
+  cumsum.push_back(sum);
+  for (size_t i = 0; i < vec.size() - 1; ++i) {
+    sum += tier4_autoware_utils::calcDistance2d(vec[i], vec[i + 1]);
+    cumsum.push_back(sum);
+    lon.push_back(vec[i].longitudinal_velocity_mps);
+    lat.push_back(vec[i].lateral_velocity_mps);
+    accel.push_back(vec[i].acceleration_mps2);
+  }
+  lon.push_back(vec.back().longitudinal_velocity_mps);
+  lat.push_back(vec.back().lateral_velocity_mps);
+  accel.push_back(vec.back().acceleration_mps2);
+
+  return {cumsum, lon, lat, accel};
+}
 
 int main(int argc, char ** argv)
 {
@@ -78,7 +107,7 @@ int main(int argc, char ** argv)
 
   while (reader.has_next()) {
     const auto serialized_message = reader.read_next();
-    if (serialized_message->topic_name.compare(::k_trajectory_topic_name) == 0) {
+    if (serialized_message->topic_name.compare(k_trajectory_topic_name) == 0) {
       // trajectory
       const rclcpp::SerializedMessage raw_traj_msg(*serialized_message->serialized_data);
       autoware_auto_planning_msgs::msg::Trajectory traj_msg;
@@ -98,7 +127,7 @@ int main(int argc, char ** argv)
         trajectories.push_back(std::move(traj_msg));
         positions.push_back(positions.back());
       }
-    } else if (serialized_message->topic_name.compare(::k_localization_topic_name) == 0) {
+    } else if (serialized_message->topic_name.compare(k_localization_topic_name) == 0) {
       // localization
       const rclcpp::SerializedMessage raw_pos_msg(*serialized_message->serialized_data);
       nav_msgs::msg::Odometry pos_msg;
@@ -130,17 +159,20 @@ int main(int argc, char ** argv)
   // plotter
   pybind11::scoped_interpreter guard{};
   auto plt = matplotlibcpp17::pyplot::import();
+  using namespace matplotlibcpp17;
 
-  /*
   SmootherFrontEnd smoother{};
-  for (size_t i = 0; i < n_data; ++i) {
+  for (size_t i = 0; i < 1; ++i) {
     const auto & input_trajectory = trajectories[i];
     const auto & input_odom = positions[i];
     const auto output_trajectory = smoother.onCurrentTrajectory(input_trajectory, input_odom);
-    break;
-  }
-  */
 
-  plt.plot(Args(std::vector<int>({1, 3, 2, 4})), Kwargs("color"_a = "blue", "linewidth"_a = 1.0));
+    // plot
+    const auto input_points = motion_utils::convertToTrajectoryPointArray(input_trajectory);
+    [[maybe_unused]] const auto [in_ds, in_lon, in_lat, in_accel] = serialize(input_points, 0.0);
+    plt.plot(Args(in_ds, in_lon));
+  }
+
   plt.show();
+  return 0;
 }
