@@ -58,10 +58,11 @@ public:
     const double v0, const double a0, const double a_min, const double j_min,
     const TrajectoryPoints & forward_filtered, const TrajectoryPoints & backward_filtered) const;
 
+  TrajectoryPoints prev_output_;
+  autoware::common::osqp::OSQPInterface qp_solver_;
+
 private:
   autoware_auto_planning_msgs::msg::TrajectoryPoint prev_closest_point_;
-  TrajectoryPoints prev_output_;
   std::optional<autoware_auto_planning_msgs::msg::TrajectoryPoint>
     current_closest_point_from_prev_output_ = std::nullopt;
-  autoware::common::osqp::OSQPInterface qp_solver_;
 };

@@ -19,6 +19,7 @@
 #include <filesystem>
 #include <iostream>
 #include <optional>
+#include <string>
 #include <tuple>
 
 const std::string k_trajectory_topic_name =
@@ -159,10 +160,12 @@ int main(int argc, char ** argv)
   // plotter
   pybind11::scoped_interpreter guard{};
   auto plt = matplotlibcpp17::pyplot::import();
-  using namespace matplotlibcpp17;
+  auto [fig, axes] = plt.subplots(1, 2);
+  auto ax1 = axes[0];
+  auto ax2 = axes[1];
 
   SmootherFrontEnd smoother{};
-  for (size_t i = 0; i < 1; ++i) {
+  for (size_t i = 0; i < n_data; ++i) {
     const auto & input_trajectory = trajectories[i];
     const auto & input_odom = positions[i];
     const auto output_trajectory = smoother.onCurrentTrajectory(input_trajectory, input_odom);
@@ -170,9 +173,18 @@ int main(int argc, char ** argv)
     // plot
     const auto input_points = motion_utils::convertToTrajectoryPointArray(input_trajectory);
     [[maybe_unused]] const auto [in_ds, in_lon, in_lat, in_accel] = serialize(input_points, 0.0);
-    plt.plot(Args(in_ds, in_lon));
+    [[maybe_unused]] const auto [out_ds, out_lon, out_lat, out_accel] =
+      serialize(output_trajectory, 0.0);
+    ax1.plot(Args(in_ds, in_lon), Kwargs("color"_a = "blue", "label"_a = "input"));
+    ax1.plot(Args(out_ds, out_lon), Kwargs("color"_a = "red", "label"_a = "output"));
+    ax1.set_xlabel(Args("distance"));
+    ax1.set_ylabel(Args(R"(longitidinal veloctiy [$m/s$])"));
+    ax2.plot(Args(out_accel), Kwargs("color"_a = "red", "label"_a = "output"));
+    ax2.set_xlabel(Args("distance"));
+    ax2.set_ylabel(Args(R"(acceleration [$m/s^{2}$])"));
+    plt.pause(Args(0.1));
+    plt.clf();
   }
 
-  plt.show();
   return 0;
 }
