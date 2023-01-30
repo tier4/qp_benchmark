@@ -169,6 +169,7 @@ int main(int argc, char ** argv)
     const auto & input_trajectory = trajectories[i];
     const auto & input_odom = positions[i];
     const auto output_trajectory = smoother.onCurrentTrajectory(input_trajectory, input_odom);
+    std::cout << i << "-th iteration" << std::endl;
 
     // plot
     const auto input_points = motion_utils::convertToTrajectoryPointArray(input_trajectory);
@@ -183,7 +184,7 @@ int main(int argc, char ** argv)
     ax2.set_xlabel(Args("distance"));
     ax2.set_ylabel(Args(R"(acceleration [$m/s^{2}$])"));
     plt.pause(Args(0.1));
-    plt.clf();
+    plt.cla();
   }
 
   return 0;
