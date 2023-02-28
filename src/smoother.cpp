@@ -24,6 +24,9 @@ TrajectoryPoints SmootherFrontEnd::onCurrentTrajectory(
   // Size changes(trimming)
   auto traj_extracted = trajectory_utils::extractPathAroundIndex(
     input, input_closest, param_.extract_ahead_dist, param_.extract_behind_dist);
+  std::cout << "extract_ahead_dist = " << param_.extract_ahead_dist << std::endl;
+  std::cout << "extract_behind_dist = " << param_.extract_behind_dist << std::endl;
+
   if (traj_extracted.empty()) {
     return prev_output_;
   }
@@ -86,6 +89,7 @@ TrajectoryPoints SmootherFrontEnd::onCurrentTrajectory(
   // Max velocity filter for safety
   trajectory_utils::applyMaximumVelocityLimit(
     traj_resampled_closest, traj_smoothed.size(), param_.max_velocity, &traj_smoothed);
+  std::cout << "max_velocity = " << param_.max_velocity << std::endl;
 
   // Insert behind velocity for output's consistency
   insertBehindVelocity(traj_resampled_closest, type, &traj_smoothed);
@@ -94,18 +98,14 @@ TrajectoryPoints SmootherFrontEnd::onCurrentTrajectory(
   updatePrevValues(traj_smoothed, current_odom);
 
   // NOTE: `solution_resample` is published to controller
-  /*
-  const auto solution_resampled = resampling::resampleTrajectory(
-    optimized, current_odom.pose.pose, param_.ego_nearest_dist_threshold,
-    param_.ego_nearest_yaw_threshold, param_.post_resample_param, false);
-  */
-  std::cout << "input: " << input.size() << ", traj_extracted: " << traj_extracted.size()
-            << ", traj_lateral_acc_filtered: " << traj_lateral_acc_filtered.value().size()
-            << ", traj_steering_rate_limited: " << traj_steering_rate_limited.value().size()
-            << ", traj_resampled: " << traj_resampled.size()
-            << ", traj_smoothed: " << traj_smoothed.size() << std::endl;
-
-  return traj_smoothed;
+  auto traj_smoothed_resampled = resampling::resampleTrajectory(
+    traj_smoothed, current_odom.twist.twist.linear.x, current_odom.pose.pose,
+    param_.ego_nearest_dist_threshold, param_.ego_nearest_yaw_threshold, param_.post_resample_param,
+    false);
+  if (not traj_smoothed_resampled.empty()) {
+    traj_smoothed_resampled.back().longitudinal_velocity_mps = 0.0;
+  }
+  return traj_smoothed_resampled;
 }
 
 // optimizer function
@@ -129,9 +129,9 @@ std::optional<TrajectoryPoints> SmootherFrontEnd::apply(
   const double a_stop_decel = param_.base_param.stop_decel;
   const double j_max = param_.base_param.max_jerk;
   const double j_min = param_.base_param.min_jerk;
-  [[maybe_unused]] const double over_j_weight = param_.smoother_param.over_j_weight;
-  [[maybe_unused]] const double over_v_weight = param_.smoother_param.over_v_weight;
-  [[maybe_unused]] const double over_a_weight = param_.smoother_param.over_a_weight;
+  const double over_j_weight = param_.smoother_param.over_j_weight;
+  const double over_v_weight = param_.smoother_param.over_v_weight;
+  const double over_a_weight = param_.smoother_param.over_a_weight;
 
   // jerk filter
   const auto forward_filtered =
@@ -514,6 +514,9 @@ void SmootherFrontEnd::updatePrevValues(
 
 void SmootherFrontEnd::applyStopApproachingVelocity(TrajectoryPoints * input) const
 {
+  std::cout << "stopping_distance = " << param_.stopping_distance << std::endl;
+  std::cout << "stopping_velocity = " << param_.stopping_velocity << std::endl;
+
   const auto stop_idx = motion_utils::searchZeroVelocityIndex(*input);
   if (!stop_idx) {
     // do nothing
@@ -538,6 +541,11 @@ SmootherFrontEnd::calcInitialMotion(
   const TrajectoryPoints & input, const nav_msgs::msg::Odometry & current_odom,
   const size_t input_closest) const
 {
+  std::cout << "replan_vel_deviation = " << param_.replan_vel_deviation << std::endl;
+  std::cout << "engage_velocity = " << param_.engage_velocity << std::endl;
+  std::cout << "engage_exit_ratio = " << param_.engage_exit_ratio << std::endl;
+  std::cout << "engage_acceleration = " << param_.engage_acceleration << std::endl;
+
   const double vehicle_speed = std::fabs(current_odom.twist.twist.linear.x);
 
   if (!current_closest_point_from_prev_output_.has_value()) {
@@ -578,6 +586,24 @@ std::optional<TrajectoryPoints> SmootherFrontEnd::applyLateralAccelerationFilter
   const TrajectoryPoints & input, const double v0, const double a0,
   const bool enable_smooth_limit) const
 {
+  std::cout << "base_param.decel_distance_before_curve = "
+            << param_.base_param.decel_distance_before_curve << std::endl;
+  std::cout << "base_param.decel_distance_after_curve = "
+            << param_.base_param.decel_distance_after_curve << std::endl;
+  std::cout << "base_param.min_decel_for_lateral_acc_lim_filter = "
+            << param_.base_param.min_decel_for_lateral_acc_lim_filter << std::endl;
+  std::cout << "base_param.min_curve_velocity = " << param_.base_param.min_curve_velocity
+            << std::endl;
+  std::cout << "base_param.curvature_calculation_distance = "
+            << param_.base_param.curvature_calculation_distance << std::endl;
+  std::cout << "base_param.sample_ds = " << param_.base_param.sample_ds << std::endl;
+  std::cout << "base_param.curvature_threshold = " << param_.base_param.curvature_threshold
+            << std::endl;
+  std::cout << "base_param.sample_ds = " << param_.base_param.sample_ds << std::endl;
+  std::cout << "base_param.wheel_base = " << param_.base_param.wheel_base << std::endl;
+  std::cout << "base_param.max_steering_angle_rate = " << param_.base_param.max_steering_angle_rate
+            << std::endl;
+
   if (input.empty()) {
     return std::nullopt;
   }
