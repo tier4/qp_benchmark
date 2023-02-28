@@ -46,10 +46,10 @@ struct Param
     // and autoware_launch/config/planning/scenario_planning/common/common.param.yaml
     // See SmootherBase::SmootherBase()
     const double max_accel = 1.0;
-    const double min_decel = -0.5;
+    const double min_decel = -1.0;
     const double stop_decel = 0.0;
     const double max_jerk = 1.0;
-    const double min_jerk = -0.5;
+    const double min_jerk = -1.0;
     const double max_lateral_accel = 1.0;
     const double min_decel_for_lateral_acc_lim_filter = -2.5;
     const double min_curve_velocity = 2.74;
@@ -64,15 +64,21 @@ struct Param
     // from
     // autoware_launch/config/planning/scenario_planning/common/motion_velocity_smoother/motion_velocity_smoother.param.yaml
     // See SmootherBase::SmootherBase()
-    ResampleParam resample_param{300.0, 30.0, 10.0, 0.1, 0.1, 0.1, 1.0};
+    ResampleParam resample_param{
+      200.0, /* max_trajectory_length */
+      180.0, /* min_trajectory_length */
+      2.0,   /* resample_time */
+      0.2,   /* dense_resample_dt */
+      0.1,   /* dense_min_interval_distance */
+      0.5,   /* sparse_resamle_dt */
+      4.0    /* sparse_min_interval_distance */
+    };
   } base_param;
 
   // from
   // autoware_launch/config/planning/scenario_planning/common/motion_velocity_smoother/motion_velocity_smoother.param.yaml
   // See MotionVelocitySmootherNode::initCommonParam()
-  ResampleParam post_resample_param{
-    200.0, 150.0, 2.0, 0.2, 0.1, 0.5, 4.0,
-  };
+  ResampleParam post_resample_param{300.0, 30.0, 10.0, 0.1, 0.1, 0.1, 1.0};
 
   // from
   // autoware_launch/config/planning/scenario_planning/common/motion_velocity_smoother/JerkFiltered.param.yaml

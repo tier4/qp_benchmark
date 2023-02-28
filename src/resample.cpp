@@ -186,7 +186,8 @@ TrajectoryPoints resampleTrajectory(
   double dist_i{0.0};
   bool is_zero_point_included{false};
   bool is_endpoint_included{false};
-  while (rclcpp::ok()) {
+  // NOTE: instead of while(ros::ok()) in the original code
+  while (true) {
     double ds = nominal_ds;
     if (start_stop_arclength_value <= dist_i && dist_i <= stop_arclength_value) {
       // Dense sampling before the stop point

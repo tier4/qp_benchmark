@@ -62,14 +62,12 @@ serialize(
 int main(int argc, char ** argv)
 {
   if (argc <= 1) {
-    std::cout << "Usage: ros2 run trajectory_optimizer benchmark <path to bagdir (in share)>"
-              << std::endl;
+    std::cout << "Usage: ros2 run trajectory_optimizer benchmark <rel path to bagdir>" << std::endl;
     return 1;
   }
 
-  const auto bag_path = ament_index_cpp::get_package_share_directory("trajectory_optimizer") +
-                        "/bags/" + std::string(argv[1]);
-  if (const auto path = std::filesystem::path{bag_path}; not std::filesystem::exists(path)) {
+  const auto bag_path = std::filesystem::current_path() / std::string(argv[1]);
+  if (not std::filesystem::exists(bag_path)) {
     std::cout << "Cannot open " << bag_path << std::endl;
     return 1;
   }
@@ -160,9 +158,11 @@ int main(int argc, char ** argv)
   // plotter
   pybind11::scoped_interpreter guard{};
   auto plt = matplotlibcpp17::pyplot::import();
+  /*
   auto [fig, axes] = plt.subplots(1, 2);
   auto ax1 = axes[0];
   auto ax2 = axes[1];
+  */
 
   SmootherFrontEnd smoother{};
   for (size_t i = 0; i < n_data; ++i) {
@@ -172,19 +172,24 @@ int main(int argc, char ** argv)
     std::cout << i << "-th iteration" << std::endl;
 
     // plot
-    const auto input_points = motion_utils::convertToTrajectoryPointArray(input_trajectory);
-    [[maybe_unused]] const auto [in_ds, in_lon, in_lat, in_accel] = serialize(input_points, 0.0);
-    [[maybe_unused]] const auto [out_ds, out_lon, out_lat, out_accel] =
-      serialize(output_trajectory, 0.0);
-    ax1.plot(Args(in_ds, in_lon), Kwargs("color"_a = "blue", "label"_a = "input"));
-    ax1.plot(Args(out_ds, out_lon), Kwargs("color"_a = "red", "label"_a = "output"));
-    ax1.set_xlabel(Args("distance"));
-    ax1.set_ylabel(Args(R"(longitidinal veloctiy [$m/s$])"));
-    ax2.plot(Args(out_accel), Kwargs("color"_a = "red", "label"_a = "output"));
-    ax2.set_xlabel(Args("distance"));
-    ax2.set_ylabel(Args(R"(acceleration [$m/s^{2}$])"));
-    plt.pause(Args(0.1));
-    plt.cla();
+    if (i % 5 == 0) {
+      const auto input_points = motion_utils::convertToTrajectoryPointArray(input_trajectory);
+      [[maybe_unused]] const auto [in_ds, in_lon, in_lat, in_accel] = serialize(input_points, 0.0);
+      [[maybe_unused]] const auto [out_ds, out_lon, out_lat, out_accel] =
+        serialize(output_trajectory, 0.0);
+      // plt.plot(Args(in_ds, in_accel), Kwargs("color"_a = "blue", "label"_a = "input"));
+      plt.plot(Args(out_ds, out_accel), Kwargs("color"_a = "red", "label"_a = "output"));
+      plt.xlabel(Args("distance"));
+      plt.ylabel(Args(R"(longitidinal veloctiy [$m/s$])"));
+      plt.legend();
+      /*
+      ax2.plot(Args(out_accel), Kwargs("color"_a = "red", "label"_a = "output"));
+      ax2.set_xlabel(Args("distance"));
+      ax2.set_ylabel(Args(R"(acceleration [$m/s^{2}$])"));
+      */
+      plt.pause(Args(0.1));
+      plt.cla();
+    }
   }
 
   return 0;

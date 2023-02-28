@@ -53,7 +53,7 @@ TrajectoryPoints SmootherFrontEnd::onCurrentTrajectory(
   auto traj_resampled = resampling::resampleTrajectory(
     traj_steering_rate_limited.value(), current_odom.pose.pose, param_.ego_nearest_dist_threshold,
     param_.ego_nearest_yaw_threshold, param_.base_param.resample_param,
-    param_.smoother_param.jerk_filter_ds);
+    param_.smoother_param.jerk_filter_ds, true);
   const size_t traj_resampled_closest = findNearestIndexFromEgo(traj_resampled, current_odom);
   // Set 0[m/s] in the terminal point
   if (not traj_resampled.empty()) {
@@ -99,6 +99,12 @@ TrajectoryPoints SmootherFrontEnd::onCurrentTrajectory(
     optimized, current_odom.pose.pose, param_.ego_nearest_dist_threshold,
     param_.ego_nearest_yaw_threshold, param_.post_resample_param, false);
   */
+  std::cout << "input: " << input.size() << ", traj_extracted: " << traj_extracted.size()
+            << ", traj_lateral_acc_filtered: " << traj_lateral_acc_filtered.value().size()
+            << ", traj_steering_rate_limited: " << traj_steering_rate_limited.value().size()
+            << ", traj_resampled: " << traj_resampled.size()
+            << ", traj_smoothed: " << traj_smoothed.size() << std::endl;
+
   return traj_smoothed;
 }
 
@@ -151,7 +157,7 @@ std::optional<TrajectoryPoints> SmootherFrontEnd::apply(
     // No need to do optimization
     output.front().longitudinal_velocity_mps = v0;
     output.front().acceleration_mps2 = a0;
-    return std::nullopt;
+    return std::make_optional<TrajectoryPoints>(output);
   }
 
   // to avoid getting 0 as a stop point, search zero velocity index from 1.
@@ -314,9 +320,15 @@ std::optional<TrajectoryPoints> SmootherFrontEnd::apply(
   }
 
   // execute optimization
-  const auto result =
-    qp_solver_.optimize(P, A, q, lower_bound, upper_bound);  // this function is mutable
+  const auto result = qp_solver_.optimize(P, A, q, lower_bound, upper_bound);
   const std::vector<double> optval = std::get<0>(result);
+
+  /*
+  const auto tf1 = std::chrono::system_clock::now();
+  const double dt_ms1 =
+    std::chrono::duration_cast<std::chrono::nanoseconds>(tf1 - ts).count() * 1.0e-6;
+  RCLCPP_DEBUG(logger_, "optimization time = %f [ms]", dt_ms1);
+  */
 
   // get velocity & acceleration
   for (size_t i = 0; i < N; ++i) {
@@ -328,6 +340,35 @@ std::optional<TrajectoryPoints> SmootherFrontEnd::apply(
     output.at(i).longitudinal_velocity_mps = 0.0;
     output.at(i).acceleration_mps2 = a_stop_decel;
   }
+
+  qp_solver_.logUnsolvedStatus("[motion_velocity_smoother]");
+
+  /*
+  const int status_polish = std::get<2>(result);
+  if (status_polish != 1) {
+    const auto msg = status_polish == 0    ? "unperformed"
+                     : status_polish == -1 ? "unsuccessful"
+                                           : "unknown";
+    RCLCPP_WARN(logger_, "osqp polish process failed : %s. The result may be inaccurate", msg);
+  }
+
+  if (VERBOSE_TRAJECTORY_VELOCITY) {
+    const auto s_output = trajectory_utils::calcArclengthArray(output);
+
+    std::cerr << "\n\n" << std::endl;
+    for (size_t i = 0; i < N; ++i) {
+      const auto v_opt = output.at(i).longitudinal_velocity_mps;
+      const auto a_opt = output.at(i).acceleration_mps2;
+      const auto ds = i < interval_dist_arr.size() ? interval_dist_arr.at(i) : 0.0;
+      const auto v_rs = i < opt_resampled_trajectory.size()
+                          ? opt_resampled_trajectory.at(i).longitudinal_velocity_mps
+                          : 0.0;
+      RCLCPP_INFO(
+        logger_, "i =  %4lu | s: %5f | ds: %5f | rs: %9f | op_v: %10f | op_a: %10f |", i,
+        s_output.at(i), ds, v_rs, v_opt, a_opt);
+    }
+  }
+  */
 
   return std::make_optional<TrajectoryPoints>(output);
 }
