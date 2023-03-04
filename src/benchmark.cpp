@@ -28,7 +28,7 @@ const std::string k_localization_topic_name = "/localization/kinematic_state";
 const std::string k_out_trajectory_topic_name =
   "/planning/scenario_planning/motion_velocity_smoother/trajectory";
 
-static double toSec(const builtin_interfaces::msg::Time & msg)
+[[maybe_unused]] static double toSec(const builtin_interfaces::msg::Time & msg)
 {
   return msg.sec + static_cast<double>(msg.nanosec) / 1'000'000'000;
 }
@@ -101,14 +101,10 @@ int main(int argc, char ** argv)
   rclcpp::Serialization<nav_msgs::msg::Odometry> pos_serialize_helper;
 
   // wait for first data
-  std::optional<double> latest_time;
   std::optional<autoware_auto_planning_msgs::msg::Trajectory> latest_in_traj;
   std::optional<autoware_auto_planning_msgs::msg::Trajectory> latest_out_traj;
   std::optional<nav_msgs::msg::Odometry> latest_pos;
-  auto data_ready = [&]() {
-    return latest_in_traj.has_value() && latest_out_traj.has_value() && latest_pos.has_value();
-  };
-  bool data_ready_prev = false;
+  auto in_data_ready = [&]() { return latest_in_traj.has_value() && latest_pos.has_value(); };
 
   while (reader.has_next()) {
     const auto serialized_message = reader.read_next();
@@ -118,65 +114,23 @@ int main(int argc, char ** argv)
       autoware_auto_planning_msgs::msg::Trajectory traj_msg;
       traj_serialize_helper.deserialize_message(&raw_traj_msg, &traj_msg);
       latest_in_traj = traj_msg;
-      latest_time = ::toSec(traj_msg.header.stamp);
-      // all data received
-      if (data_ready() && !data_ready_prev) {
-        times.push_back(0.0);
-        in_trajectories.push_back(std::move(traj_msg));
-        out_trajectories.push_back(latest_out_traj.value());
-        positions.push_back(latest_pos.value());
-        data_ready_prev = true;
-      }
-      // use latest for others
-      else if (data_ready() && data_ready_prev) {
-        times.push_back(latest_time.value() - times.back());
-        in_trajectories.push_back(std::move(traj_msg));
-        out_trajectories.push_back(out_trajectories.back());
-        positions.push_back(positions.back());
-      }
-    } else if (serialized_message->topic_name.compare(k_out_trajectory_topic_name) == 0) {
-      // trajectory
-      const rclcpp::SerializedMessage raw_traj_msg(*serialized_message->serialized_data);
-      autoware_auto_planning_msgs::msg::Trajectory traj_msg;
-      traj_serialize_helper.deserialize_message(&raw_traj_msg, &traj_msg);
-      latest_out_traj = traj_msg;
-      latest_time = ::toSec(traj_msg.header.stamp);
-      // all data received
-      if (data_ready() && !data_ready_prev) {
-        times.push_back(0.0);
-        in_trajectories.push_back(latest_in_traj.value());
-        out_trajectories.push_back(std::move(traj_msg));
-        positions.push_back(latest_pos.value());
-        data_ready_prev = true;
-      }
-      // use latest for others
-      else if (data_ready() && data_ready_prev) {
-        times.push_back(latest_time.value() - times.back());
-        in_trajectories.push_back(in_trajectories.back());
-        out_trajectories.push_back(std::move(traj_msg));
-        positions.push_back(positions.back());
-      }
     } else if (serialized_message->topic_name.compare(k_localization_topic_name) == 0) {
       // localization
       const rclcpp::SerializedMessage raw_pos_msg(*serialized_message->serialized_data);
       nav_msgs::msg::Odometry pos_msg;
       pos_serialize_helper.deserialize_message(&raw_pos_msg, &pos_msg);
       latest_pos = pos_msg;
-      latest_time = toSec(pos_msg.header.stamp);
+    } else if (serialized_message->topic_name.compare(k_out_trajectory_topic_name) == 0) {
+      // trajectory
+      const rclcpp::SerializedMessage raw_traj_msg(*serialized_message->serialized_data);
+      autoware_auto_planning_msgs::msg::Trajectory traj_msg;
+      traj_serialize_helper.deserialize_message(&raw_traj_msg, &traj_msg);
+      latest_out_traj = traj_msg;
       // all data received
-      if (data_ready() && !data_ready_prev) {
-        times.push_back(0.0);
+      if (in_data_ready()) {
         in_trajectories.push_back(latest_in_traj.value());
-        out_trajectories.push_back(latest_out_traj.value());
-        positions.push_back(std::move(pos_msg));
-        data_ready_prev = true;
-      }
-      // use latest for others
-      else if (data_ready() && data_ready_prev) {
-        times.push_back(latest_time.value() - times.back());
-        in_trajectories.push_back(in_trajectories.back());
-        out_trajectories.push_back(out_trajectories.back());
-        positions.push_back(std::move(pos_msg));
+        positions.push_back(latest_pos.value());
+        out_trajectories.push_back(std::move(traj_msg));
       }
     }
   }
