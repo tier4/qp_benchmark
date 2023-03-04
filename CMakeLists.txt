@@ -25,8 +25,13 @@ ament_auto_add_executable(benchmark
 )
 target_link_libraries(benchmark benchmark_smoother matplotlibcpp17::matplotlibcpp17)
 
+ament_auto_add_executable(benchmark_node
+  src/benchmark_node.cpp
+)
+target_link_libraries(benchmark_node benchmark_smoother matplotlibcpp17::matplotlibcpp17)
+
 ament_auto_package(
   INSTALL_TO_SHARE
   bags
-  config
+  launch
 )
