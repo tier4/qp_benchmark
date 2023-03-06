@@ -2,6 +2,7 @@
 
 #include "./param.hpp"
 
+#include <motion_velocity_smoother/smoother/jerk_filtered_smoother.hpp>
 #include <osqp_interface/osqp_interface.hpp>
 
 #include <autoware_auto_planning_msgs/msg/trajectory.hpp>
@@ -28,8 +29,13 @@ public:
   };
 
 public:
+  // with warm-start
   TrajectoryPoints onCurrentTrajectory(
     const autoware_auto_planning_msgs::msg::Trajectory &, const nav_msgs::msg::Odometry &);
+  // use JerkFiltered instance
+  TrajectoryPoints onCurrentTrajectory2(
+    const autoware_auto_planning_msgs::msg::Trajectory &, const nav_msgs::msg::Odometry &,
+    const std::shared_ptr<motion_velocity_smoother::JerkFilteredSmoother> smoother);
   TrajectoryPoints calcTrajectoryVelocity(
     const TrajectoryPoints &, const nav_msgs::msg::Odometry &) const;
   void updatePrevValues(const TrajectoryPoints &, const nav_msgs::msg::Odometry &);

@@ -100,6 +100,101 @@ TrajectoryPoints SmootherFrontEnd::onCurrentTrajectory(
   return traj_smoothed;
 }
 
+TrajectoryPoints SmootherFrontEnd::onCurrentTrajectory2(
+  const autoware_auto_planning_msgs::msg::Trajectory & sub_trajectory,
+  const nav_msgs::msg::Odometry & current_odom,
+  const std::shared_ptr<motion_velocity_smoother::JerkFilteredSmoother> smoother)
+{
+  if (not prev_output_.empty()) {
+    // NOTE: calcProjectedTrajectoryPointFromEgo(prev_output_)と同一
+    const size_t current_seg_idx = motion_utils::findFirstNearestSegmentIndexWithSoftConstraints(
+      prev_output_, current_odom.pose.pose, param_.ego_nearest_dist_threshold,
+      param_.ego_nearest_yaw_threshold);
+    current_closest_point_from_prev_output_ = trajectory_utils::calcInterpolatedTrajectoryPoint(
+      prev_output_, current_odom.pose.pose, current_seg_idx);
+  }
+
+  const auto input = motion_utils::convertToTrajectoryPointArray(sub_trajectory);
+  const size_t input_closest = findNearestIndexFromEgo(input, current_odom);
+
+  // Size changes(trimming)
+  auto traj_extracted = trajectory_utils::extractPathAroundIndex(
+    input, input_closest, param_.extract_ahead_dist, param_.extract_behind_dist);
+  std::cout << "extract_ahead_dist = " << param_.extract_ahead_dist << std::endl;
+  std::cout << "extract_behind_dist = " << param_.extract_behind_dist << std::endl;
+
+  if (traj_extracted.empty()) {
+    return prev_output_;
+  }
+  const size_t traj_extracted_closest = findNearestIndexFromEgo(traj_extracted, current_odom);
+
+  // Size does not change
+  applyStopApproachingVelocity(&traj_extracted);
+
+  const auto [initial_motion, type] =
+    calcInitialMotion(traj_extracted, current_odom, traj_extracted_closest);
+
+  // Size changes(resample)
+  const auto traj_lateral_acc_filtered =
+    applyLateralAccelerationFilter(traj_extracted, initial_motion.vel, initial_motion.acc, true);
+  if (not traj_lateral_acc_filtered.has_value()) {
+    return prev_output_;
+  }
+
+  // Size changes(resample)
+  const auto traj_steering_rate_limited = applySteeringRateLimit(traj_lateral_acc_filtered.value());
+  if (not traj_steering_rate_limited.has_value()) {
+    return prev_output_;
+  }
+
+  // Size changes(resample)
+  // JerkFilteredSmootherのresampleTrajectory()
+  auto traj_resampled = resampling::resampleTrajectory(
+    traj_steering_rate_limited.value(), current_odom.pose.pose, param_.ego_nearest_dist_threshold,
+    param_.ego_nearest_yaw_threshold, param_.base_param.resample_param,
+    param_.smoother_param.jerk_filter_ds, true);
+  const size_t traj_resampled_closest = findNearestIndexFromEgo(traj_resampled, current_odom);
+  // Set 0[m/s] in the terminal point
+  if (not traj_resampled.empty()) {
+    traj_resampled.back().longitudinal_velocity_mps = 0.0;
+  }
+
+  // Size changes ?(do trimming to run optimization only on the interval [closest, end))
+  TrajectoryPoints clipped;
+  clipped.insert(
+    clipped.end(), traj_resampled.begin() + traj_resampled_closest, traj_resampled.end());
+
+  TrajectoryPoints traj_smoothed;
+  std::vector<TrajectoryPoints> debug_trajectories;
+  if (!smoother->apply(
+        initial_motion.vel, initial_motion.acc, clipped, traj_smoothed, debug_trajectories)) {
+    return prev_output_;
+  }
+
+  overwriteStopPoint(clipped, &traj_smoothed);
+
+  // Becomes the same size input_filltered_resample (push [strat, closest) part)
+  traj_smoothed.insert(
+    traj_smoothed.begin(), traj_resampled.begin(), traj_resampled.begin() + traj_resampled_closest);
+
+  // For the endpoint of the trajectory
+  if (not traj_smoothed.empty()) {
+    traj_smoothed.back().longitudinal_velocity_mps = 0.0;
+  }
+
+  // Max velocity filter for safety
+  trajectory_utils::applyMaximumVelocityLimit(
+    traj_resampled_closest, traj_smoothed.size(), param_.max_velocity, &traj_smoothed);
+  std::cout << "max_velocity = " << param_.max_velocity << std::endl;
+
+  // Insert behind velocity for output's consistency
+  insertBehindVelocity(traj_resampled_closest, type, &traj_smoothed);
+
+  // COMMENT: save solution to prev_output_
+  updatePrevValues(traj_smoothed, current_odom);
+
+  return traj_smoothed;
+}
 // optimizer function
 std::optional<TrajectoryPoints> SmootherFrontEnd::apply(
   const double v0, const double a0, const TrajectoryPoints & input)

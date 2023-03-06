@@ -16,7 +16,6 @@
 
 // smoother
 #include <motion_velocity_smoother/motion_velocity_smoother_node.hpp>
-#include <motion_velocity_smoother/smoother/jerk_filtered_smoother.hpp>
 
 #include <matplotlibcpp17/pyplot.h>
 
@@ -69,8 +68,8 @@ int main(int argc, char ** argv)
   rclcpp::init(argc, argv);
   auto node = rclcpp::Node::make_shared("get_param");
 
-  [[maybe_unused]] auto jerk_filtered_smoother =
-    std::make_shared<motion_velocity_smoother::MotionVelocitySmootherNode>(rclcpp::NodeOptions());
+  [[maybe_unused]] const auto jerk_filtered_smoother =
+    std::make_shared<motion_velocity_smoother::JerkFilteredSmoother>(*node);
 
   const std::string bag_path = node->declare_parameter("bag_path", "./bags");
   if (not std::filesystem::exists(bag_path)) {
@@ -157,32 +156,15 @@ int main(int argc, char ** argv)
   for (size_t i = 0; i < n_data; ++i) {
     const auto & in_trajectory = in_trajectories[i];
     const auto & input_odom = positions[i];
-    const auto & input_max_velocity = max_velocities[i];
-
-    {
-      const auto msg = std::make_shared<nav_msgs::msg::Odometry>(input_odom);
-      jerk_filtered_smoother->onCurrentOdometry(msg);
-    }
-    {
-      const auto msg =
-        input_max_velocity.has_value()
-          ? std::make_shared<tier4_planning_msgs::msg::VelocityLimit>(input_max_velocity.value())
-          : nullptr;
-      jerk_filtered_smoother->onExternalVelocityLimit(msg);
-    }
-    {
-      const auto msg =
-        std::make_shared<autoware_auto_planning_msgs::msg::Trajectory>(in_trajectory);
-      jerk_filtered_smoother->onCurrentTrajectory(msg);
-    }
+    // const auto & input_max_velocity = max_velocities[i];
 
     const auto solution_trajectory = smoother.onCurrentTrajectory(in_trajectory, input_odom);
     std::cout << i << "-th iteration" << std::endl;
-
+    const auto solution_trajectory2 =
+      smoother.onCurrentTrajectory2(in_trajectory, input_odom, jerk_filtered_smoother);
     // plot
-    const auto [out_ds, out_lon, out_lat, out_accel] =
-      serialize(jerk_filtered_smoother->getPrevSolution(), 0.0);
     const auto [solu_ds, solu_lon, solu_lat, solu_accel] = serialize(solution_trajectory, 0.0);
+    const auto [out_ds, out_lon, out_lat, out_accel] = serialize(solution_trajectory2, 0.0);
     ax1.plot(
       Args(out_ds, out_accel),
       Kwargs("color"_a = "blue", "label"_a = "ground truth", "linestyle"_a = "dashed"));
