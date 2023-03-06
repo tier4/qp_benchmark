@@ -97,15 +97,7 @@ TrajectoryPoints SmootherFrontEnd::onCurrentTrajectory(
   // COMMENT: save solution to prev_output_
   updatePrevValues(traj_smoothed, current_odom);
 
-  // NOTE: `solution_resample` is published to controller
-  auto traj_smoothed_resampled = resampling::resampleTrajectory(
-    traj_smoothed, current_odom.twist.twist.linear.x, current_odom.pose.pose,
-    param_.ego_nearest_dist_threshold, param_.ego_nearest_yaw_threshold, param_.post_resample_param,
-    false);
-  if (not traj_smoothed_resampled.empty()) {
-    traj_smoothed_resampled.back().longitudinal_velocity_mps = 0.0;
-  }
-  return traj_smoothed_resampled;
+  return traj_smoothed;
 }
 
 // optimizer function

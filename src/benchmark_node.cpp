@@ -1,19 +1,18 @@
+#include "./smoother.hpp"
+
 #include <ament_index_cpp/get_package_share_directory.hpp>
+#include <motion_utils/trajectory/tmp_conversion.hpp>
 #include <rclcpp/rclcpp.hpp>
 #include <rclcpp/serialization.hpp>
 #include <rclcpp/serialized_message.hpp>
 #include <rosbag2_cpp/converter_interfaces/serialization_format_converter.hpp>
 #include <rosbag2_cpp/readers/sequential_reader.hpp>
 #include <rosbag2_storage/storage_options.hpp>
+#include <tier4_autoware_utils/geometry/geometry.hpp>
 
 #include <autoware_auto_planning_msgs/msg/trajectory.hpp>
 #include <nav_msgs/msg/odometry.hpp>
-// #include <tier4_planning_msgs/msg/velocity_limit.hpp>
-
-#include "./smoother.hpp"
-
-#include <motion_utils/trajectory/tmp_conversion.hpp>
-#include <tier4_autoware_utils/geometry/geometry.hpp>
+#include <tier4_planning_msgs/msg/velocity_limit.hpp>
 
 // smoother
 #include <motion_velocity_smoother/motion_velocity_smoother_node.hpp>
@@ -30,8 +29,7 @@
 const std::string k_in_trajectory_topic_name =
   "/planning/scenario_planning/scenario_selector/trajectory";
 const std::string k_localization_topic_name = "/localization/kinematic_state";
-const std::string k_out_trajectory_topic_name =
-  "/planning/scenario_planning/motion_velocity_smoother/trajectory";
+const std::string k_max_velocity_topic_name = "/planning/scenario_planning/max_velocity";
 
 [[maybe_unused]] static double toSec(const builtin_interfaces::msg::Time & msg)
 {
@@ -72,7 +70,7 @@ int main(int argc, char ** argv)
   auto node = rclcpp::Node::make_shared("get_param");
 
   [[maybe_unused]] auto jerk_filtered_smoother =
-    std::make_shared<motion_velocity_smoother::JerkFilteredSmoother>(*node);
+    std::make_shared<motion_velocity_smoother::MotionVelocitySmootherNode>(rclcpp::NodeOptions());
 
   const std::string bag_path = node->declare_parameter("bag_path", "./bags");
   if (not std::filesystem::exists(bag_path)) {
@@ -98,45 +96,46 @@ int main(int argc, char ** argv)
   // Fetchall data
   std::vector<double> times;
   std::vector<autoware_auto_planning_msgs::msg::Trajectory> in_trajectories;
-  std::vector<autoware_auto_planning_msgs::msg::Trajectory> out_trajectories;
   std::vector<nav_msgs::msg::Odometry> positions;
+  std::vector<std::optional<tier4_planning_msgs::msg::VelocityLimit>> max_velocities;
 
   // Helper
   rclcpp::Serialization<builtin_interfaces::msg::Time> time_serialized_helper;
   rclcpp::Serialization<autoware_auto_planning_msgs::msg::Trajectory> traj_serialize_helper;
   rclcpp::Serialization<nav_msgs::msg::Odometry> pos_serialize_helper;
+  rclcpp::Serialization<tier4_planning_msgs::msg::VelocityLimit> max_velocity_helper;
 
   // wait for first data
   std::optional<autoware_auto_planning_msgs::msg::Trajectory> latest_in_traj;
-  std::optional<autoware_auto_planning_msgs::msg::Trajectory> latest_out_traj;
   std::optional<nav_msgs::msg::Odometry> latest_pos;
+  std::optional<tier4_planning_msgs::msg::VelocityLimit> latest_max_velocity;
+
   auto in_data_ready = [&]() { return latest_in_traj.has_value() && latest_pos.has_value(); };
 
   while (reader.has_next()) {
     const auto serialized_message = reader.read_next();
-    if (serialized_message->topic_name.compare(k_in_trajectory_topic_name) == 0) {
-      // trajectory
-      const rclcpp::SerializedMessage raw_traj_msg(*serialized_message->serialized_data);
-      autoware_auto_planning_msgs::msg::Trajectory traj_msg;
-      traj_serialize_helper.deserialize_message(&raw_traj_msg, &traj_msg);
-      latest_in_traj = traj_msg;
-    } else if (serialized_message->topic_name.compare(k_localization_topic_name) == 0) {
+    if (serialized_message->topic_name.compare(k_localization_topic_name) == 0) {
       // localization
       const rclcpp::SerializedMessage raw_pos_msg(*serialized_message->serialized_data);
       nav_msgs::msg::Odometry pos_msg;
       pos_serialize_helper.deserialize_message(&raw_pos_msg, &pos_msg);
       latest_pos = pos_msg;
-    } else if (serialized_message->topic_name.compare(k_out_trajectory_topic_name) == 0) {
+    } else if (serialized_message->topic_name.compare(k_max_velocity_topic_name) == 0) {
+      const rclcpp::SerializedMessage raw_max_velocity_msg(*serialized_message->serialized_data);
+      tier4_planning_msgs::msg::VelocityLimit max_velocity_msg;
+      max_velocity_helper.deserialize_message(&raw_max_velocity_msg, &max_velocity_msg);
+      latest_max_velocity = max_velocity_msg;
+    } else if (serialized_message->topic_name.compare(k_in_trajectory_topic_name) == 0) {
       // trajectory
       const rclcpp::SerializedMessage raw_traj_msg(*serialized_message->serialized_data);
       autoware_auto_planning_msgs::msg::Trajectory traj_msg;
       traj_serialize_helper.deserialize_message(&raw_traj_msg, &traj_msg);
-      latest_out_traj = traj_msg;
+      latest_in_traj = traj_msg;
       // all data received
       if (in_data_ready()) {
         in_trajectories.push_back(latest_in_traj.value());
         positions.push_back(latest_pos.value());
-        out_trajectories.push_back(std::move(traj_msg));
+        max_velocities.push_back(latest_max_velocity);
       }
     }
   }
@@ -158,13 +157,31 @@ int main(int argc, char ** argv)
   for (size_t i = 0; i < n_data; ++i) {
     const auto & in_trajectory = in_trajectories[i];
     const auto & input_odom = positions[i];
-    const auto & out_trajectory = out_trajectories[i];
+    const auto & input_max_velocity = max_velocities[i];
+
+    {
+      const auto msg = std::make_shared<nav_msgs::msg::Odometry>(input_odom);
+      jerk_filtered_smoother->onCurrentOdometry(msg);
+    }
+    {
+      const auto msg =
+        input_max_velocity.has_value()
+          ? std::make_shared<tier4_planning_msgs::msg::VelocityLimit>(input_max_velocity.value())
+          : nullptr;
+      jerk_filtered_smoother->onExternalVelocityLimit(msg);
+    }
+    {
+      const auto msg =
+        std::make_shared<autoware_auto_planning_msgs::msg::Trajectory>(in_trajectory);
+      jerk_filtered_smoother->onCurrentTrajectory(msg);
+    }
+
     const auto solution_trajectory = smoother.onCurrentTrajectory(in_trajectory, input_odom);
     std::cout << i << "-th iteration" << std::endl;
 
     // plot
     const auto [out_ds, out_lon, out_lat, out_accel] =
-      serialize(motion_utils::convertToTrajectoryPointArray(out_trajectory), 0.0);
+      serialize(jerk_filtered_smoother->getPrevSolution(), 0.0);
     const auto [solu_ds, solu_lon, solu_lat, solu_accel] = serialize(solution_trajectory, 0.0);
     ax1.plot(
       Args(out_ds, out_accel),
